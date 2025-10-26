@@ -1,0 +1,51 @@
+DECLARE @ParentId INT;
+SET @ParentId = 1;
+
+-- Step 1: Build the hierarchy recursively
+WITH RecursiveUnits AS (
+    -- Anchor: direct children of @ParentId
+    SELECT 
+        id, 
+        unit_name, 
+        parent_id,
+        1 AS Level
+    FROM UnitMaster
+    WHERE parent_id = @ParentId
+
+    UNION ALL
+
+    -- Recursive part: get deeper levels
+    SELECT 
+        u.id, 
+        u.unit_name, 
+        u.parent_id,
+        ru.Level + 1 AS Level
+    FROM UnitMaster u
+    INNER JOIN RecursiveUnits ru ON u.parent_id = ru.id
+),
+-- Step 2: Build child hierarchy for each node
+ChildTree AS (
+    SELECT 
+        parent.id AS root_id,
+        child.id AS child_id
+    FROM UnitMaster parent
+    JOIN UnitMaster child ON child.parent_id = parent.id
+
+    UNION ALL
+
+    SELECT 
+        ct.root_id,
+        u.id AS child_id
+    FROM UnitMaster u
+    JOIN ChildTree ct ON u.parent_id = ct.child_id
+)
+-- Step 3: Select only Level 2 nodes and collect their child IDs
+SELECT 
+    ru.id AS Level2UnitId,
+    ru.unit_name AS Level2UnitName,
+    STRING_AGG(ct.child_id, ',') AS ChildUnitIds
+FROM RecursiveUnits ru
+LEFT JOIN ChildTree ct ON ru.id = ct.root_id
+WHERE ru.Level = 2
+GROUP BY ru.id, ru.unit_name
+ORDER BY ru.id;
